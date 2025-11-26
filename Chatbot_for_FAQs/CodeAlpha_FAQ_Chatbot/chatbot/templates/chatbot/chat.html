@@ -1,0 +1,168 @@
+{% extends 'chatbot/base.html' %}
+
+{% block content %}
+<div class="chat-container">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2 class="mb-0">AI FAQ Assistant</h2>
+                <div>
+                    <span class="ai-badge">Powered by AI</span>
+                    <span class="badge bg-info">FAQs: {{ faq_count }}</span>
+                </div>
+            </div>
+            
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle"></i> 
+                <strong>AI-Powered:</strong> This chatbot uses machine learning to understand your questions and find the best matching answers from our FAQ database.
+            </div>
+            
+            <div class="messages" id="messages">
+                <div class="bot-message">
+                    <strong><i class="fas fa-robot"></i> AI Assistant:</strong> 
+                    Hello! I'm your AI-powered FAQ assistant. I can help you with questions about shipping, returns, payments, and more. What would you like to know?
+                    <div class="confidence">AI Confidence: 1.00</div>
+                </div>
+            </div>
+            
+            <div class="input-group mb-3">
+                <input type="text" class="form-control" id="userInput" 
+                       placeholder="Ask me anything (e.g., What is your return policy? How long does shipping take?)" 
+                       aria-label="Ask a question">
+                <button class="btn btn-primary" type="button" id="sendButton">
+                    <i class="fas fa-paper-plane"></i> Send
+                </button>
+            </div>
+            
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="card-title"><i class="fas fa-lightbulb"></i> Try asking about:</h6>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <ul class="list-unstyled">
+                                <li><small>"What is your return policy?"</small></li>
+                                <li><small>"How long does shipping take?"</small></li>
+                                <li><small>"Do you ship internationally?"</small></li>
+                            </ul>
+                        </div>
+                        <div class="col-md-4">
+                            <ul class="list-unstyled">
+                                <li><small>"What payment methods do you accept?"</small></li>
+                                <li><small>"How can I track my order?"</small></li>
+                                <li><small>"What is your warranty?"</small></li>
+                            </ul>
+                        </div>
+                        <div class="col-md-4">
+                            <ul class="list-unstyled">
+                                <li><small>"Do you have physical stores?"</small></li>
+                                <li><small>"How do I contact support?"</small></li>
+                                <li><small>"Are products authentic?"</small></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add CSRF token -->
+{% csrf_token %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const messagesDiv = document.getElementById('messages');
+    const userInput = document.getElementById('userInput');
+    const sendButton = document.getElementById('sendButton');
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+    
+    function addMessage(message, isUser = false, confidence = null) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = isUser ? 'user-message' : 'bot-message';
+        
+        let messageContent = '';
+        if (isUser) {
+            messageContent = `<strong><i class="fas fa-user"></i> You:</strong> ${message}`;
+        } else {
+            messageContent = `<strong><i class="fas fa-robot"></i> AI Assistant:</strong> ${message}`;
+            if (confidence !== null) {
+                let confidenceClass = 'text-danger';
+                if (confidence >= 0.7) confidenceClass = 'text-success';
+                else if (confidence >= 0.3) confidenceClass = 'text-warning';
+                
+                messageContent += `<div class="confidence ${confidenceClass}">AI Confidence: ${confidence}</div>`;
+            }
+        }
+        
+        messageDiv.innerHTML = messageContent;
+        messagesDiv.appendChild(messageDiv);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+    
+    function sendMessage() {
+        const message = userInput.value.trim();
+        if (!message) return;
+        
+        addMessage(message, true);
+        userInput.value = '';
+        userInput.focus();
+        
+        // Show typing indicator
+        const typingDiv = document.createElement('div');
+        typingDiv.className = 'bot-message';
+        typingDiv.innerHTML = '<strong><i class="fas fa-robot"></i> AI Assistant:</strong> <i class="fas fa-cog fa-spin"></i> Thinking...';
+        messagesDiv.appendChild(typingDiv);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        
+        fetch('/api/chat/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify({ 
+                message: message 
+            })
+        })
+        .then(response => {
+            console.log('Response status:', response.status);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            console.log('Response data:', data);
+            // Remove typing indicator
+            messagesDiv.removeChild(typingDiv);
+            
+            if (data.response) {
+                addMessage(data.response, false, data.confidence);
+            } else if (data.error) {
+                addMessage('Error: ' + data.error, false);
+            } else {
+                addMessage('Sorry, I encountered an unexpected error.', false);
+            }
+        })
+        .catch(error => {
+            // Remove typing indicator
+            messagesDiv.removeChild(typingDiv);
+            console.error('Error:', error);
+            addMessage('Sorry, there was an error connecting to the server. Please try again.', false);
+        });
+    }
+    
+    sendButton.addEventListener('click', sendMessage);
+    
+    userInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            sendMessage();
+        }
+    });
+    
+    userInput.focus();
+});
+</script>
+{% endblock %}

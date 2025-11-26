@@ -1,0 +1,5 @@
+# Ignore Python virtual environments
+*/translator_env/
+*/chatbot_env/
+*.pyc
+__pycache__/
